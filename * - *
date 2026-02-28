@@ -1,0 +1,104 @@
+/eye oled test
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// Paramètres des yeux
+int eyeWidth = 30;
+int eyeHeight = 20;
+int pupilRadius = 5;
+int pupilOffsetX = 0;  // mouvement horizontal des pupilles
+
+// Timing animation
+unsigned long previousMillis = 0;
+const int interval = 30;  // ms entre chaque frame
+
+// Clignement
+bool blink = false;
+bool closing = true;          // true = on ferme, false = on ouvre
+unsigned long blinkTimer = 0;
+unsigned long nextBlink = 0; // intervalle aléatoire avant prochain blink
+
+void setup() {
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    randomSeed(analogRead(0));
+    nextBlink = random(2000, 5000);
+}
+
+// Dessine un œil complet avec pupille
+void drawEye(int centerX, int centerY, int pupilY) {
+    display.fillRoundRect(centerX - eyeWidth/2,
+                          centerY - eyeHeight/2,
+                          eyeWidth,
+                          eyeHeight,
+                          8,
+                          SSD1306_WHITE);
+    display.fillCircle(centerX + pupilOffsetX, pupilY, pupilRadius, SSD1306_BLACK);
+}
+
+void animateEyes() {
+    display.clearDisplay();
+
+    // Pupilles qui bougent horizontalement
+    pupilOffsetX = 10 * sin(millis() * 0.002);
+
+    // Déclenchement clignement aléatoire
+    if (!blink && millis() - blinkTimer > nextBlink) {
+        blink = true;
+        closing = true;        // commencer par fermer l’œil
+        blinkTimer = millis();
+        nextBlink = random(2000, 5000);
+    }
+
+    int pupilY = 32;           // position normale de la pupille
+    int blinkHeight = 0;       // hauteur du rideau supérieur
+
+    if (blink) {
+        float duration = closing ? 500.0 : 300.0; // fermeture rapide, ouverture plus lente
+        float t = (float)(millis() - blinkTimer) / duration;
+        if (t >= 1.0) {
+            t = 1.0;
+            if (closing) {
+                // on commence à ouvrir
+                closing = false;
+                blinkTimer = millis();
+            } else {
+                // clignement terminé
+                blink = false;
+                blinkTimer = millis();
+            }
+        }
+
+        // easing cosinus pour clignement fluide
+        float ease = 0.5 - 0.5 * cos(t * PI);
+        blinkHeight = (eyeHeight / 1.5) * ease;
+        pupilY += blinkHeight / 4; // pupille suit légèrement le rideau
+    }
+
+    // Dessin des yeux avec pupilles
+    drawEye(40, 32, pupilY);
+    drawEye(88, 32, pupilY);
+
+    // Recouvre le haut de l’œil pour simuler clignement
+    if (blinkHeight > 0) {
+        display.fillRect(40 - eyeWidth/2, 32 - eyeHeight/2, eyeWidth, blinkHeight, SSD1306_BLACK);
+        display.fillRect(88 - eyeWidth/2, 32 - eyeHeight/2, eyeWidth, blinkHeight, SSD1306_BLACK);
+    }
+
+    display.display();
+}
+
+void loop() {
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis >= interval) {
+        previousMillis = currentMillis;
+        animateEyes();
+    }
+}
